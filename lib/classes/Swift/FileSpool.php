@@ -157,6 +157,11 @@ class Swift_FileSpool extends Swift_ConfigurableSpool
             }
         }
 
+        if (!$this->pingSMTPTransport($transport)) {
+            $transport->stop();
+            $transport->start();
+        }
+
         $failedRecipients = (array) $failedRecipients;
         $count = 0;
         $time = time();
@@ -172,6 +177,11 @@ class Swift_FileSpool extends Swift_ConfigurableSpool
 
             if (substr($file, -8) != '.message') {
                 continue;
+            }
+
+            if ($count % 100 === 0 && !$this->pingSMTPTransport($transport)) {
+                $transport->stop();
+                $transport->start();
             }
 
             /* We try a rename, it's an atomic operation, and avoid locking the file */
@@ -196,6 +206,26 @@ class Swift_FileSpool extends Swift_ConfigurableSpool
         }
 
         return $count;
+    }
+
+    protected function pingSMTPTransport(Swift_Transport $transport)
+    {
+        try {
+            if (!$transport->isStarted()) {
+                $transport->start();
+            }
+
+            $transport->executeCommand("NOOP\r\n", [250]);
+        } catch (Swift_TransportException $e) {
+            try {
+                $transport->stop();
+            } catch (Swift_TransportException $e) {
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
